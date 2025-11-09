@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { X, Send } from "lucide-react"
+import { X, Send, Copy, Check } from "lucide-react"
 import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import Skeleton from "react-loading-skeleton"
 import "react-loading-skeleton/dist/skeleton.css"
 import { cn, formatCellRanges } from "@/lib/utils"
@@ -16,10 +17,9 @@ interface ChatWindowProps {
 const COLS = 26
 
 export default function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
-  const [messages, setMessages] = React.useState<Array<{ id: number; text: string; sender: "user" | "assistant" }>>([
-    {
-      id: 1,
-      text: `**¡Hola!** Soy un asistente experto en análisis de datos de hojas de cálculo Excel.
+  const firstMessage =     {
+    id: 1,
+    text: `**¡Hola!** Soy un asistente experto en análisis de datos de hojas de cálculo Excel.
 
 Puedo ayudarte a:
 
@@ -28,10 +28,11 @@ Puedo ayudarte a:
 **Entender la estructura general de los datos y sus relaciones**.
 **Identificar patrones o tendencias**.
 Para empezar, por favor, dime qué te gustaría analizar o qué pregunta tienes sobre los datos de la hoja de cálculo.`,
-      sender: "assistant"
-    }
-  ])
+    sender: "assistant"
+  }
+  const [messages, setMessages] = React.useState<Array<{ id: number; text: string; sender: "user" | "assistant" }>>([])
   const [inputValue, setInputValue] = React.useState("")
+  const [copiedTableId, setCopiedTableId] = React.useState<string | null>(null)
   const { selectedCells, allCells, restoreSelection, clearSelectedCells, hotInstance, isProcessing, setIsProcessing, updateAllCells } = useSelectedCells()
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const messagesContainerRef = React.useRef<HTMLDivElement>(null)
@@ -138,6 +139,48 @@ Para empezar, por favor, dime qué te gustaría analizar o qué pregunta tienes 
     
     return parts.length > 0 ? <>{parts}</> : text
   }, [handleSelectRange])
+
+  // Función para copiar tabla al portapapeles
+  const copyTableToClipboard = React.useCallback((tableElement: HTMLTableElement, tableId: string) => {
+    try {
+      // Extraer datos de la tabla
+      const rows: string[][] = []
+      const tableRows = tableElement.querySelectorAll('tr')
+      
+      tableRows.forEach((row) => {
+        const cells: string[] = []
+        const thCells = row.querySelectorAll('th')
+        const tdCells = row.querySelectorAll('td')
+        
+        thCells.forEach((cell) => {
+          cells.push(cell.textContent?.trim() || '')
+        })
+        
+        tdCells.forEach((cell) => {
+          cells.push(cell.textContent?.trim() || '')
+        })
+        
+        if (cells.length > 0) {
+          rows.push(cells)
+        }
+      })
+      
+      // Convertir a formato tab-separated values (TSV) para Excel
+      const tsvContent = rows.map(row => row.join('\t')).join('\n')
+      
+      // Copiar al portapapeles
+      navigator.clipboard.writeText(tsvContent).then(() => {
+        setCopiedTableId(tableId)
+        setTimeout(() => {
+          setCopiedTableId(null)
+        }, 2000)
+      }).catch((err) => {
+        console.error('Error al copiar tabla:', err)
+      })
+    } catch (error) {
+      console.error('Error al copiar tabla:', error)
+    }
+  }, [])
 
   // Obtener todas las celdas de la instancia de Handsontable y convertirlas al formato de SelectedCell[]
   const getSheetContextFromHotInstance = React.useCallback((hotInstance: any): Array<{ row: number; col: number; value: string }> => {
@@ -337,6 +380,7 @@ Para empezar, por favor, dime qué te gustaría analizar o qué pregunta tienes 
                   {message.sender === "assistant" ? (
                     <div className="text-sm markdown-content">
                       <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
                         components={{
                           h1: ({node, ...props}: any) => {
                             const children = React.Children.toArray(props.children)
@@ -436,12 +480,75 @@ Para empezar, por favor, dime qué te gustaría analizar o qué pregunta tienes 
                             return <blockquote className="border-l-4 border-emerald-300 pl-3 italic my-2 text-gray-700" {...props}>{processedChildren}</blockquote>
                           },
                           hr: ({node, ...props}) => <hr className="my-3 border-gray-300" {...props} />,
-                          table: ({node, ...props}) => <table className="border-collapse border border-gray-300 my-2 w-full" {...props} />,
-                          thead: ({node, ...props}) => <thead className="bg-gray-100" {...props} />,
-                          tbody: ({node, ...props}) => <tbody {...props} />,
-                          tr: ({node, ...props}) => <tr className="border-b border-gray-300" {...props} />,
-                          th: ({node, ...props}) => <th className="border border-gray-300 px-2 py-1 text-left font-semibold" {...props} />,
-                          td: ({node, ...props}) => <td className="border border-gray-300 px-2 py-1" {...props} />,
+                          table: ({node, ...props}: any) => {
+                            const [tableId] = React.useState(() => `table-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+                            const containerRef = React.useRef<HTMLDivElement>(null)
+                            const isCopied = copiedTableId === tableId
+                            
+                            const handleCopy = () => {
+                              if (containerRef.current) {
+                                const tableElement = containerRef.current.querySelector('table') as HTMLTableElement
+                                if (tableElement) {
+                                  copyTableToClipboard(tableElement, tableId)
+                                }
+                              }
+                            }
+                            
+                            return (
+                              <div ref={containerRef} className="relative my-4 rounded-lg border border-emerald-200 shadow-sm group">
+                                <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={handleCopy}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 rounded-md shadow-sm hover:bg-emerald-50 hover:border-emerald-400 transition-colors text-sm font-medium text-emerald-700"
+                                    title="Copiar tabla"
+                                  >
+                                    {isCopied ? (
+                                      <>
+                                        <Check className="w-4 h-4" />
+                                        <span>Copiado</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="w-4 h-4" />
+                                        <span>Copiar</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                                <div className="overflow-x-auto">
+                                  <table 
+                                    className="border-collapse w-full min-w-full" 
+                                    {...props} 
+                                  />
+                                </div>
+                              </div>
+                            )
+                          },
+                          thead: ({node, ...props}) => <thead className="bg-gradient-to-r from-emerald-100 to-teal-100" {...props} />,
+                          tbody: ({node, ...props}) => <tbody className="bg-white divide-y divide-emerald-100" {...props} />,
+                          tr: ({node, ...props}) => <tr className="hover:bg-emerald-50 transition-colors" {...props} />,
+                          th: ({node, ...props}: any) => {
+                            // Obtener alineación del nodo o de props
+                            const alignment = (node?.properties?.align as string) || props.align || 'left'
+                            const alignClass = alignment === 'right' ? 'text-right' : alignment === 'center' ? 'text-center' : 'text-left'
+                            return (
+                              <th 
+                                className={`border-b-2 border-emerald-300 px-4 py-2.5 font-semibold text-gray-900 ${alignClass}`} 
+                                {...props} 
+                              />
+                            )
+                          },
+                          td: ({node, ...props}: any) => {
+                            // Obtener alineación del nodo o de props
+                            const alignment = (node?.properties?.align as string) || props.align || 'left'
+                            const alignClass = alignment === 'right' ? 'text-right' : alignment === 'center' ? 'text-center' : 'text-left'
+                            return (
+                              <td 
+                                className={`border-b border-emerald-100 px-4 py-2.5 text-gray-700 ${alignClass}`} 
+                                {...props} 
+                              />
+                            )
+                          },
                         }}
                       >
                         {processTextWithSelectRange(message.text)}
