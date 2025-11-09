@@ -191,32 +191,6 @@ export default function ExcelGridHandsontable() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white px-8 py-4 shadow-lg">
-        <div className="flex items-center justify-between ml-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight ml-4">Excelia</h1>
-            <p className="text-sm text-emerald-50 mt-1 ml-4 flex items-center gap-3">
-              <span>Excel con IA</span>
-              <span className="text-emerald-200/50">•</span>
-              <KeyboardHint keys={['Ctrl', 'K']} action="comandos" variant="compact" />
-            </p>
-          </div>
-          <div className="flex items-center gap-4 text-sm">
-            <div className="bg-emerald-500/30 px-3 py-2 rounded-lg backdrop-blur-sm">
-              <span className="text-emerald-50">Celdas: </span>
-              <span className="font-semibold">{ROWS}×{COLS}</span>
-            </div>
-            {selectedCells.length > 0 && (
-              <div className="bg-teal-400/40 px-3 py-2 rounded-lg animate-pulse backdrop-blur-sm">
-                <span className="text-white">Seleccion: </span>
-                <span className="font-semibold">{selectedCells.length}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Handsontable Container */}
       <div className="flex-1 overflow-hidden relative">
         {isMounted ? (
