@@ -119,27 +119,23 @@ export default function LandingPage() {
           className="text-center mb-12"
         >
           {/* Logo */}
-          <div className="flex justify-center mb-6">
+          <div className="flex justify-center">
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.5 }}
-              className="relative w-32 h-32"
+              className="relative w-[220px] h-[220px]"
             >
               <Image
                 src="https://simplepassbucket.s3.amazonaws.com/img/eventos/eventImage_20251109_002039_294_26588048.png"
                 alt="Excelia Logo"
-                width={128}
-                height={128}
+                width={220}
+                height={220}
                 className="object-contain"
                 priority
               />
             </motion.div>
           </div>
-          
-          <h1 className="text-6xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent mb-4">
-            Excelia
-          </h1>
           <p className="text-xl text-gray-600 font-light">
             ¿Qué querés hacer hoy?
           </p>

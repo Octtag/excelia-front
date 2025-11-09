@@ -110,13 +110,9 @@ export default function EditorPage({ initialData }: EditorPageProps) {
             </div>
           </div>
           <div className="flex items-center gap-4 text-sm">
-            <div className="bg-emerald-500/30 px-3 py-2 rounded-lg backdrop-blur-sm">
-              <span className="text-emerald-50">Celdas: </span>
-              <span className="font-semibold">{ROWS}×{COLS}</span>
-            </div>
             {selectedCells.length > 0 && (
-              <div className="bg-teal-400/40 px-3 py-2 rounded-lg animate-pulse backdrop-blur-sm">
-                <span className="text-white">Selección: </span>
+              <div className="px-3 py-2 text-white">
+                <span>Selección: </span>
                 <span className="font-semibold">{selectedCells.length}</span>
               </div>
             )}
