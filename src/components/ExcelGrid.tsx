@@ -205,7 +205,7 @@ export default function ExcelGrid() {
     try {
       const selectedData = getSelectedCellsData()
 
-      const response = await fetch("http://localhost:8000/api/excel/execute", {
+      const response = await fetch("https://excelia-back.onrender.com/api/excel/execute", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

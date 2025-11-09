@@ -147,18 +147,69 @@ export default function ExcelGridHandsontable({
     setCommandResult(null)
   }, [clearSelectedCells])
 
+  // Obtener todas las celdas de la instancia de Handsontable como contexto
+  const getSheetContextFromHotInstance = useCallback((hotInstance: any): Array<{ row: number; col: number; value: string }> => {
+    if (!hotInstance) return []
+
+    const sheetContext: Array<{ row: number; col: number; value: string }> = []
+    const ROWS_COUNT = data.length || ROWS
+    const COLS_COUNT = (data && data[0] ? data[0].length : null) || COLS
+
+    // Intentar usar getData() si está disponible (más eficiente)
+    let allData: string[][] = []
+    if (hotInstance.getData && typeof hotInstance.getData === 'function') {
+      const rawData = hotInstance.getData()
+      allData = rawData.map((row: any[]) =>
+        row.map((cell: any) => cell ? String(cell) : '')
+      )
+    } else {
+      // Fallback: usar getDataAtCell para todas las celdas
+      for (let row = 0; row < ROWS_COUNT; row++) {
+        const rowData: string[] = []
+        for (let col = 0; col < COLS_COUNT; col++) {
+          const value = hotInstance.getDataAtCell(row, col)
+          rowData.push(value ? String(value) : '')
+        }
+        allData.push(rowData)
+      }
+    }
+
+    // Convertir a formato de sheet_context (solo celdas con valor)
+    for (let row = 0; row < allData.length; row++) {
+      for (let col = 0; col < allData[row].length; col++) {
+        const value = allData[row][col]
+        // Solo incluir celdas que tengan valor (no vacías)
+        if (value && value.trim() !== '') {
+          sheetContext.push({
+            row,
+            col,
+            value: String(value)
+          })
+        }
+      }
+    }
+
+    return sheetContext
+  }, [data, ROWS, COLS])
+
   const handleExecuteCommand = async (command: string) => {
     setIsProcessing(true)
 
     try {
-      const response = await fetch("http://localhost:8000/api/excel/execute", {
+      const hot = hotTableRef.current?.hotInstance
+
+      // Obtener sheet_context directamente de la instancia de Handsontable
+      const sheetContext = hot ? getSheetContextFromHotInstance(hot) : []
+
+      const response = await fetch("https://excelia-back.onrender.com/api/excel/ask", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           command,
-          selectedCells: selectedCells,
+          selectedCells: selectedCells.length > 0 ? selectedCells : null,
+          sheetContext: sheetContext,
         }),
       })
 
