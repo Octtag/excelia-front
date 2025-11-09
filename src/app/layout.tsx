@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Excelia - Excel con IA",
   description: "Hoja de cálculo moderna con inteligencia artificial",
+  icons: {
+    icon: "https://simplepassbucket.s3.amazonaws.com/img/eventos/eventImage_20251109_034441_090_33337056.png",
+    shortcut: "https://simplepassbucket.s3.amazonaws.com/img/eventos/eventImage_20251109_034441_090_33337056.png",
+    apple: "https://simplepassbucket.s3.amazonaws.com/img/eventos/eventImage_20251109_034441_090_33337056.png",
+  },
 };
 
 export default function RootLayout({

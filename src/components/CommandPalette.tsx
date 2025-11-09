@@ -10,6 +10,7 @@ interface CommandPaletteProps {
   cellCount: number
   position?: { x: number; y: number }
   isProcessing?: boolean
+  result?: string | null
 }
 
 export default function CommandPalette({
@@ -19,14 +20,31 @@ export default function CommandPalette({
   selectedRange,
   cellCount,
   position = { x: 0, y: 0 },
-  isProcessing = false
+  isProcessing = false,
+  result = null
 }: CommandPaletteProps) {
   const [command, setCommand] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
+  const paletteRef = useRef<HTMLDivElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [palettePosition, setPalettePosition] = useState(position)
+
+  // Resetear posición cuando se abre
+  useEffect(() => {
+    if (isOpen) {
+      setPalettePosition(position)
+    }
+  }, [isOpen, position])
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 50)
+      // Forzar el foco inmediatamente y también con un pequeño delay
+      inputRef.current.focus()
+      setTimeout(() => {
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      }, 100)
     }
   }, [isOpen])
 
@@ -43,6 +61,47 @@ export default function CommandPalette({
     return () => window.removeEventListener("keydown", handleEscape, { capture: true })
   }, [isOpen, onClose])
 
+  // Manejo del drag
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        setPalettePosition({
+          x: e.clientX - dragOffset.x,
+          y: e.clientY - dragOffset.y
+        })
+      }
+    }
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+    }
+
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove)
+      window.addEventListener('mouseup', handleMouseUp)
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, dragOffset])
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Solo permitir drag desde el header
+    if (paletteRef.current && e.target instanceof HTMLElement) {
+      const headerElement = e.currentTarget
+      if (headerElement.classList.contains('palette-header')) {
+        const rect = paletteRef.current.getBoundingClientRect()
+        setDragOffset({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        })
+        setIsDragging(true)
+      }
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (command.trim() && !isProcessing) {
@@ -55,27 +114,25 @@ export default function CommandPalette({
   // Calcular posicion para que aparezca arriba de la seleccion
   const style: React.CSSProperties = {
     position: 'fixed',
-    left: `${Math.min(Math.max(position.x, 20), window.innerWidth - 620)}px`,
-    top: `${Math.max(position.y - 180, 90)}px`,
-    zIndex: 9999
+    left: `${Math.min(Math.max(palettePosition.x, 20), window.innerWidth - 620)}px`,
+    top: `${Math.max(palettePosition.y - 180, 90)}px`,
+    zIndex: 9999,
+    cursor: isDragging ? 'grabbing' : 'default'
   }
 
   return (
     <>
-      {/* Overlay semitransparente */}
-      <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[9998]"
-        onClick={onClose}
-        style={{ animation: 'fadeIn 0.15s ease-out' }}
-      />
-
       {/* Command Palette */}
       <div
+        ref={paletteRef}
         style={style}
-        className="w-[600px] bg-white/95 backdrop-blur-xl border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
+        className="w-[600px] bg-white border border-gray-300 rounded-2xl shadow-2xl overflow-hidden"
       >
-        {/* Header */}
-        <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
+        {/* Header - Draggable */}
+        <div
+          className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 palette-header cursor-grab active:cursor-grabbing select-none"
+          onMouseDown={handleMouseDown}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -115,6 +172,7 @@ export default function CommandPalette({
                 onChange={(e) => setCommand(e.target.value)}
                 placeholder="Describe la operacion... (ej: suma, promedio, maximo)"
                 disabled={isProcessing}
+                autoFocus
                 className="w-full pl-12 pr-4 py-3.5 text-[15px] bg-gray-50 border-2 border-gray-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 placeholder:text-gray-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
@@ -133,6 +191,27 @@ export default function CommandPalette({
                 </button>
               ))}
             </div>
+
+            {/* Resultado */}
+            {result && (
+              <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-semibold text-emerald-900 mb-1">
+                      Resultado
+                    </h4>
+                    <p className="text-sm text-emerald-800 leading-relaxed whitespace-pre-wrap break-words">
+                      {result}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
@@ -169,13 +248,6 @@ export default function CommandPalette({
           </div>
         </form>
       </div>
-
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-      `}</style>
     </>
   )
 }

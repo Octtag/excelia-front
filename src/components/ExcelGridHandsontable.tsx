@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { HotTable } from '@handsontable/react'
 import { registerAllModules } from 'handsontable/registry'
@@ -37,6 +36,7 @@ export default function ExcelGridHandsontable({
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 })
   const [selectedRange, setSelectedRange] = useState("")
   const [isMounted, setIsMounted] = useState(false)
+  const [commandResult, setCommandResult] = useState<string | null>(null)
 
   // Estados para selección de celdas durante edición de fórmula
   const isEditingFormulaRef = useRef(false)
@@ -144,6 +144,7 @@ export default function ExcelGridHandsontable({
     setShowCommandModal(false)
     clearSelectedCells()
     setSelectedRange("")
+    setCommandResult(null)
   }, [clearSelectedCells])
 
   const handleExecuteCommand = async (command: string) => {
@@ -167,31 +168,116 @@ export default function ExcelGridHandsontable({
         const hot = hotTableRef.current?.hotInstance
         if (!hot) return
 
-        // Encontrar celda vacía cercana para el resultado
-        const lastCell = selectedCells[selectedCells.length - 1]
-        let targetRow = lastCell.row
-        let targetCol = lastCell.col + 1
+        // Verificar si hay resultados por columna (múltiples columnas)
+        if (result.columnResults && result.columnResults.length > 0) {
+          console.log("📊 Resultados por columna detectados:", result.columnResults)
 
-        // Si está fuera del límite, buscar abajo
-        if (targetCol >= COLS) {
-          targetCol = lastCell.col
-          targetRow = lastCell.row + 1
+          // Encontrar la fila máxima de la selección
+          const maxRow = Math.max(...selectedCells.map(cell => cell.row))
+          const maxRows = data.length || ROWS
+
+          // Verificar si hay espacio debajo
+          if (maxRow + 1 >= maxRows) {
+            setCommandResult("No hay espacio suficiente debajo de la selección")
+            setIsProcessing(false)
+            return
+          }
+
+          // Insertar cada resultado debajo de su columna
+          const changes: Array<[number, number, string]> = []
+          result.columnResults.forEach((colResult: any) => {
+            changes.push([maxRow + 1, colResult.col, colResult.formula])
+          })
+
+          // Aplicar todos los cambios de una vez
+          hot.setDataAtCell(changes)
+
+          // Seleccionar la primera celda con resultado
+          if (result.columnResults.length > 0) {
+            const firstCol = result.columnResults[0].col
+            hot.selectCell(maxRow + 1, firstCol)
+          }
+
+          // Cerrar el modal
+          setIsProcessing(false)
+          handleCloseModal()
+          return
         }
 
-        // Insertar resultado
-        hot.setDataAtCell(targetRow, targetCol, result.result)
-        
+        // Verificar si es consulta general o si tiene fórmula
+        const isGeneralQuery = result.isGeneralQuery
+        const formula = result.formula
+        const resultValue = result.result
+
+        // Si es consulta general o no tiene fórmula, mostrar en el modal
+        if (isGeneralQuery || !formula) {
+          setCommandResult(resultValue)
+          setIsProcessing(false)
+          // NO cerrar el modal, mantenerlo abierto para mostrar el resultado
+          return
+        }
+
+        // Si tiene fórmula, determinar dónde insertarla según la dirección de la selección
+        const firstCell = selectedCells[0]
+        const lastCell = selectedCells[selectedCells.length - 1]
+
+        // Calcular dimensiones de la selección
+        const selectionRows = Math.abs(lastCell.row - firstCell.row) + 1
+        const selectionCols = Math.abs(lastCell.col - firstCell.col) + 1
+
+        // Verificar límites de la tabla
+        const maxCols = data[0]?.length || COLS
+        const maxRows = data.length || ROWS
+
+        let targetRow: number
+        let targetCol: number
+        let hasSpace = false
+
+        // Determinar si la selección es más horizontal o vertical
+        const isHorizontal = selectionCols > selectionRows
+
+        if (isHorizontal) {
+          // Selección horizontal → intentar poner a la derecha
+          targetRow = lastCell.row
+          targetCol = lastCell.col + 1
+
+          if (targetCol < maxCols) {
+            hasSpace = true
+          }
+        } else {
+          // Selección vertical → intentar poner abajo
+          targetRow = lastCell.row + 1
+          targetCol = lastCell.col
+
+          if (targetRow < maxRows) {
+            hasSpace = true
+          }
+        }
+
+        // Si no hay espacio en la dirección preferida, mostrar en el modal
+        if (!hasSpace) {
+          setCommandResult(resultValue)
+          setIsProcessing(false)
+          return
+        }
+
+        // Insertar fórmula en la celda disponible
+        hot.setDataAtCell(targetRow, targetCol, formula)
+
         // Seleccionar la celda con el resultado
         hot.selectCell(targetRow, targetCol)
+
+        // Cerrar el modal
+        setIsProcessing(false)
+        handleCloseModal()
       } else {
         alert(`Error: ${result.error}`)
+        setIsProcessing(false)
       }
     } catch (error) {
       console.error("Error ejecutando comando:", error)
       alert("Error al procesar el comando. Verifica que el backend esté corriendo.")
-    } finally {
       setIsProcessing(false)
-      handleCloseModal()
     }
   }
 
@@ -216,6 +302,11 @@ export default function ExcelGridHandsontable({
       autoWrapRow: true,
       autoWrapCol: true,
       stretchH: 'all',
+      // Habilitar cálculo de fórmulas con HyperFormula
+      formulas: {
+        engine: HyperFormula,
+        sheetName: 'Sheet1'
+      },
       // Estilo personalizado con colores verdes
       className: 'htCenter htMiddle excelia-table',
       cells: function(row, col) {
@@ -274,9 +365,140 @@ export default function ExcelGridHandsontable({
 
         hot.addHook('afterSelection', handleSelection)
         hot.addHook('afterDeselect', handleDeselect)
+      },
+      // Bloquear eventos de teclado cuando el CommandPalette está abierto
+      beforeKeyDown: function(event: KeyboardEvent) {
+        // Si el CommandPalette está abierto, bloquear todos los eventos de teclado en Handsontable
+        // para que no se escriba en las celdas
+        if (showCommandModal) {
+          event.stopImmediatePropagation()
+          return false
+        }
+      },
+      // Hooks para manejar selección durante edición de fórmulas
+      afterBeginEditing: function(row: number, col: number) {
+        const hot = hotTableRef.current?.hotInstance
+        if (!hot) return
+
+        // Guardar referencia al editor y configurar listener
+        setTimeout(() => {
+          const editor = hot.getActiveEditor()
+          if (editor && editor.TEXTAREA) {
+            editorRef.current = editor.TEXTAREA
+            const cellValue = editor.TEXTAREA.value
+
+            // Detectar si estamos editando una fórmula (comienza con =, + o -)
+            if (cellValue && isFormula(cellValue)) {
+              isEditingFormulaRef.current = true
+              editingCellRef.current = { row, col }
+            }
+
+            // Agregar listener para detectar cuando se empieza a escribir una fórmula
+            const inputListener = (e: Event) => {
+              const target = e.target as HTMLTextAreaElement
+              if (isFormula(target.value)) {
+                isEditingFormulaRef.current = true
+                editingCellRef.current = { row, col }
+              } else {
+                isEditingFormulaRef.current = false
+                editingCellRef.current = null
+              }
+            }
+
+            editor.TEXTAREA.addEventListener('input', inputListener)
+
+            // Cleanup listener cuando se cierra el editor
+            const cleanup = () => {
+              editor.TEXTAREA?.removeEventListener('input', inputListener)
+            }
+
+            // Guardar cleanup para llamarlo después
+            setTimeout(() => {
+              if (!hot.isListening()) {
+                cleanup()
+              }
+            }, 100)
+          }
+        }, 0)
+      },
+      afterSelectionEnd: function(row: number, col: number, row2: number, col2: number) {
+        if (!isEditingFormulaRef.current || !editingCellRef.current || !editorRef.current) return
+
+        const hot = hotTableRef.current?.hotInstance
+        if (!hot) return
+
+        const editingCell = editingCellRef.current
+
+        // No hacer nada si estamos seleccionando la celda que estamos editando
+        if (row === editingCell.row && col === editingCell.col &&
+            row2 === editingCell.row && col2 === editingCell.col) {
+          return
+        }
+
+        // Formatear la referencia de la celda/rango seleccionado
+        const cellRef = formatRange([row, col, row2, col2])
+
+        // Insertar la referencia en la posición del cursor en el editor
+        const editor = editorRef.current
+        const cursorPos = editor.selectionStart || editor.value.length
+        const currentValue = editor.value
+        const newValue = currentValue.slice(0, cursorPos) + cellRef + currentValue.slice(cursorPos)
+
+        editor.value = newValue
+        editor.focus()
+
+        // Posicionar el cursor después de la referencia insertada
+        const newCursorPos = cursorPos + cellRef.length
+        editor.setSelectionRange(newCursorPos, newCursorPos)
+
+        // Trigger input event para que Handsontable detecte el cambio
+        const event = new Event('input', { bubbles: true })
+        editor.dispatchEvent(event)
+
+        // Volver a seleccionar la celda que estamos editando
+        setTimeout(() => {
+          hot.selectCell(editingCell.row, editingCell.col)
+        }, 0)
+      },
+      afterChange: function(changes: any, source: string) {
+        if (!changes) return
+
+        const hot = hotTableRef.current?.hotInstance
+        if (!hot) return
+
+        // Detectar cuando se empieza a escribir una fórmula
+        changes.forEach((change: any) => {
+          const [row, col, , newValue] = change
+          if (newValue && isFormula(String(newValue)) && source === 'edit') {
+            isEditingFormulaRef.current = true
+            editingCellRef.current = { row, col }
+
+            const editor = hot.getActiveEditor()
+            if (editor && editor.TEXTAREA) {
+              editorRef.current = editor.TEXTAREA
+            }
+          }
+        })
+      },
+      beforeChange: function(changes: any, source: string) {
+        // Resetear estado cuando se termina la edición
+        if (source === 'edit' && changes) {
+          const editingCell = editingCellRef.current
+          changes.forEach((change: any) => {
+            const [row, col] = change
+            // Si terminamos de editar la celda actual
+            if (editingCell && row === editingCell.row && col === editingCell.col) {
+              setTimeout(() => {
+                isEditingFormulaRef.current = false
+                editingCellRef.current = null
+                editorRef.current = null
+              }, 100)
+            }
+          })
+        }
       }
     }
-  }, [data, updateSelectedCellsFromCoordinates, restoreSelection, setHotInstance, selectedCells, isProcessing])
+  }, [data, updateSelectedCellsFromCoordinates, restoreSelection, setHotInstance, selectedCells, isProcessing, isFormula, formatRange, showCommandModal])
 
   return (
     <div className="h-screen w-screen flex flex-col bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
@@ -302,6 +524,7 @@ export default function ExcelGridHandsontable({
           cellCount={selectedCells.length}
           position={modalPosition}
           isProcessing={isProcessing}
+          result={commandResult}
         />
       </div>
 
@@ -343,23 +566,52 @@ export default function ExcelGridHandsontable({
         }
         
         .excelia-selected-cell {
-          background-color: #dbeafe !important;
+          background-color: #dcfce7 !important;
         }
-        
+
         .excelia-selected-cell:hover {
-          background-color: #bfdbfe !important;
+          background-color: #bbf7d0 !important;
         }
-        
+
         .excelia-processing-cell {
-          animation: pulse-processing 1.5s ease-in-out infinite;
+          position: relative;
+          background: linear-gradient(90deg, #e5e7eb 0%, #d1d5db 50%, #e5e7eb 100%) !important;
+          background-size: 200% 100%;
+          animation: shimmer-processing 1.5s ease-in-out infinite;
+          overflow: hidden;
         }
-        
-        @keyframes pulse-processing {
-          0%, 100% {
-            background-color: #dbeafe !important;
+
+        .excelia-processing-cell::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.6) 50%,
+            rgba(255, 255, 255, 0) 100%
+          );
+          animation: shimmer-shine 1.5s ease-in-out infinite;
+        }
+
+        @keyframes shimmer-processing {
+          0% {
+            background-position: 200% 0;
           }
-          50% {
-            background-color: #60a5fa !important;
+          100% {
+            background-position: -200% 0;
+          }
+        }
+
+        @keyframes shimmer-shine {
+          0% {
+            left: -100%;
+          }
+          100% {
+            left: 200%;
           }
         }
       `}</style>
