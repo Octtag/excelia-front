@@ -201,14 +201,14 @@ export default function ExcelGridHandsontable({
       // Obtener sheet_context directamente de la instancia de Handsontable
       const sheetContext = hot ? getSheetContextFromHotInstance(hot) : []
 
-      const response = await fetch("https://excelia-back.onrender.com/api/excel/ask", {
+      const response = await fetch("https://excelia-back.onrender.com/api/excel/execute", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           command,
-          selectedCells: selectedCells.length > 0 ? selectedCells : null,
+          selectedCells: selectedCells,
           sheetContext: sheetContext,
         }),
       })
