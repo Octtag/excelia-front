@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import ExcelGridHandsontable from "@/components/ExcelGridHandsontable";
 import ChatWindow from "@/components/ChatWindow";
 import { MessageCircle } from "lucide-react";
+import { useSelectedCells } from "@/contexts/SelectedCellsContext";
 
 const MIN_CHAT_WIDTH = 250
 const MAX_CHAT_WIDTH = 800
@@ -15,7 +16,7 @@ export default function Home() {
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT_WIDTH)
   const [isResizing, setIsResizing] = useState(false)
-  const [selectedCells, setSelectedCells] = useState<Array<{row: number, col: number, value: string}>>([])
+  const { selectedCells } = useSelectedCells()
   const [headerHeight, setHeaderHeight] = useState(0)
   const resizeRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
@@ -75,7 +76,6 @@ export default function Home() {
     setIsResizing(true)
   }
 
-  console.log(isChatOpen)
   return (
     <div className="relative h-screen w-screen overflow-hidden flex flex-col">
       {/* Header */}
@@ -113,11 +113,7 @@ export default function Home() {
         className={isChatOpen ? "transition-all duration-300 flex-1 relative overflow-hidden min-h-0 h-full" : "flex-1 w-full relative overflow-hidden min-h-0 h-full"}
         style={isChatOpen ? { width: `calc(100% - ${chatWidth}px)`, height: `calc(100vh - ${headerHeight}px)` } : { height: `calc(100vh - ${headerHeight}px)` }}
       >
-        <ExcelGridHandsontable 
-          isChatOpen={isChatOpen}
-          onToggleChat={() => setIsChatOpen(!isChatOpen)}
-          onSelectedCellsChange={setSelectedCells}
-        />
+        <ExcelGridHandsontable />
       </div>
       {isChatOpen && (
         <div 

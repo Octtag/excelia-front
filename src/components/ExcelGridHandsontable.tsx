@@ -7,6 +7,7 @@ import 'handsontable/dist/handsontable.full.min.css'
 import Handsontable from 'handsontable'
 import CommandPalette from "@/components/CommandPalette"
 import KeyboardHint from "@/components/KeyboardHint"
+import { useSelectedCells } from "@/contexts/SelectedCellsContext"
 
 // Registrar todos los módulos de Handsontable
 registerAllModules()
@@ -16,7 +17,7 @@ const COLS = 26
 
 export default function ExcelGridHandsontable() {
   const hotTableRef = useRef<any>(null)
-  const [selectedCells, setSelectedCells] = useState<Array<{row: number, col: number, value: string}>>([])
+  const { selectedCells, setSelectedCells, clearSelectedCells } = useSelectedCells()
   const [showCommandModal, setShowCommandModal] = useState(false)
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 })
   const [selectedRange, setSelectedRange] = useState("")
@@ -110,9 +111,9 @@ export default function ExcelGridHandsontable() {
 
   const handleCloseModal = useCallback(() => {
     setShowCommandModal(false)
-    setSelectedCells([])
+    clearSelectedCells()
     setSelectedRange("")
-  }, [])
+  }, [clearSelectedCells])
 
   const handleExecuteCommand = async (command: string) => {
     setIsProcessing(true)
