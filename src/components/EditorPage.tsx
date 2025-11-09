@@ -114,12 +114,6 @@ export default function EditorPage({ initialData }: EditorPageProps) {
               <span className="text-emerald-50">Celdas: </span>
               <span className="font-semibold">{ROWS}×{COLS}</span>
             </div>
-            {selectedCells.length > 0 && (
-              <div className="bg-teal-400/40 px-3 py-2 rounded-lg animate-pulse backdrop-blur-sm">
-                <span className="text-white">Selección: </span>
-                <span className="font-semibold">{selectedCells.length}</span>
-              </div>
-            )}
             <button
               onClick={() => setIsChatOpen(!isChatOpen)}
               className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg backdrop-blur-sm transition-colors"

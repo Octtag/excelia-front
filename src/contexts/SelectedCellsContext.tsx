@@ -11,6 +11,7 @@ export interface SelectedCell {
 interface HandsontableInstance {
   getSelected: () => number[][] | undefined
   getDataAtCell: (row: number, col: number) => any
+  getData?: () => any[][]
   setDataAtCell: (row: number, col: number, value: any) => void
   selectCells: (ranges: number[][], scrollToSelection?: boolean, changeListener?: boolean) => void
   selectCell: (row: number, col: number, endRow?: number, endCol?: number, scrollToCell?: boolean, changeListener?: boolean) => void
@@ -18,10 +19,12 @@ interface HandsontableInstance {
 
 interface SelectedCellsContextType {
   selectedCells: SelectedCell[]
+  allCells: string[][] | null
   hotInstance: HandsontableInstance | null
   setHotInstance: (hotInstance: HandsontableInstance | null) => void
   updateSelectedCellsFromHotInstance: (hotInstance: HandsontableInstance | null | undefined) => void
   updateSelectedCellsFromCoordinates: (hotInstance: HandsontableInstance, r: number, c: number, r2: number, c2: number) => void
+  updateAllCells: (hotInstance: HandsontableInstance | null | undefined) => void
   restoreSelection: () => void
   clearSelectedCells: () => void
   isProcessing: boolean
@@ -32,6 +35,7 @@ const SelectedCellsContext = createContext<SelectedCellsContextType | undefined>
 
 export function SelectedCellsProvider({ children }: { children: ReactNode }) {
   const [selectedCells, setSelectedCells] = useState<SelectedCell[]>([])
+  const [allCells, setAllCells] = useState<string[][] | null>(null)
   const [hotInstance, setHotInstance] = useState<HandsontableInstance | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -132,14 +136,50 @@ export function SelectedCellsProvider({ children }: { children: ReactNode }) {
     setSelectedCells([])
   }, [])
 
+  const updateAllCells = useCallback((hotInstance: HandsontableInstance | null | undefined) => {
+    if (!hotInstance) {
+      setAllCells(null)
+      return
+    }
+
+    const hot = hotInstance
+    let allData: string[][] = []
+    
+    // Intentar usar getData() si está disponible (más eficiente)
+    if (hot.getData && typeof hot.getData === 'function') {
+      const data = hot.getData()
+      allData = data.map((row: any[]) => 
+        row.map((cell: any) => cell ? String(cell) : '')
+      )
+    } else {
+      // Fallback: usar getDataAtCell para todas las celdas
+      // Asumimos un tamaño estándar de 100 filas y 26 columnas (A-Z)
+      const ROWS = 100
+      const COLS = 26
+      
+      for (let row = 0; row < ROWS; row++) {
+        const rowData: string[] = []
+        for (let col = 0; col < COLS; col++) {
+          const value = hot.getDataAtCell(row, col)
+          rowData.push(value ? String(value) : '')
+        }
+        allData.push(rowData)
+      }
+    }
+    
+    setAllCells(allData)
+  }, [])
+
   return (
     <SelectedCellsContext.Provider
       value={{
         selectedCells,
+        allCells,
         hotInstance,
         setHotInstance,
         updateSelectedCellsFromHotInstance,
         updateSelectedCellsFromCoordinates,
+        updateAllCells,
         restoreSelection,
         clearSelectedCells,
         isProcessing,
