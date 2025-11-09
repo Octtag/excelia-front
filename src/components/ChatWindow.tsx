@@ -36,7 +36,7 @@ export default function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
   return (
     <div className="h-full w-full bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50 shadow-2xl flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-emerald-200 bg-primary-500 text-white shadow-lg">
+      <div className="flex items-center justify-between py-2 border-b border-emerald-200 bg-primary-500 text-white shadow-lg">
         <h2 className="text-lg font-semibold">Chat</h2>
         <button
           onClick={onClose}

@@ -5,7 +5,6 @@ import { HotTable } from '@handsontable/react'
 import { registerAllModules } from 'handsontable/registry'
 import 'handsontable/dist/handsontable.full.min.css'
 import Handsontable from 'handsontable'
-import { MessageCircle } from "lucide-react"
 
 // Registrar todos los módulos de Handsontable
 registerAllModules()
@@ -16,20 +15,46 @@ const COLS = 26
 interface ExcelGridHandsontableProps {
   isChatOpen: boolean
   onToggleChat: () => void
+  onSelectedCellsChange?: (cells: Array<{row: number, col: number, value: string}>) => void
 }
 
-export default function ExcelGridHandsontable({ isChatOpen, onToggleChat }: ExcelGridHandsontableProps) {
+export default function ExcelGridHandsontable({ isChatOpen, onToggleChat, onSelectedCellsChange }: ExcelGridHandsontableProps) {
   const hotTableRef = useRef<HotTable>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [selectedCells, setSelectedCells] = useState<Array<{row: number, col: number, value: string}>>([])
   const [showCommandModal, setShowCommandModal] = useState(false)
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 })
   const [command, setCommand] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [containerHeight, setContainerHeight] = useState(600)
 
   // Datos iniciales vacíos
   const [data, setData] = useState<string[][]>(() => 
     Array(ROWS).fill(null).map(() => Array(COLS).fill(''))
   )
+
+  // Medir altura del contenedor
+  useEffect(() => {
+    const updateHeight = () => {
+      if (containerRef.current) {
+        setContainerHeight(containerRef.current.offsetHeight)
+      }
+    }
+
+    updateHeight()
+    window.addEventListener('resize', updateHeight)
+    
+    // Usar ResizeObserver para detectar cambios de tamaño
+    const resizeObserver = new ResizeObserver(updateHeight)
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateHeight)
+      resizeObserver.disconnect()
+    }
+  }, [])
 
   // Detectar Ctrl+K para comando de IA
   useEffect(() => {
@@ -59,6 +84,7 @@ export default function ExcelGridHandsontable({ isChatOpen, onToggleChat }: Exce
         })
 
         setSelectedCells(cells)
+        onSelectedCellsChange?.(cells)
         calculateModalPosition(selected[0])
         setShowCommandModal(true)
       }
@@ -142,7 +168,7 @@ export default function ExcelGridHandsontable({ isChatOpen, onToggleChat }: Exce
     data: data,
     colHeaders: true,
     rowHeaders: true,
-    height: 'calc(100vh - 80px)',
+    height: containerHeight,
     width: '100%',
     licenseKey: 'non-commercial-and-evaluation',
     contextMenu: true,
@@ -164,40 +190,9 @@ export default function ExcelGridHandsontable({ isChatOpen, onToggleChat }: Exce
   }
 
   return (
-    <div className="h-full w-full flex flex-col bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white px-8 py-4 shadow-lg">
-        <div className="flex items-center justify-between ml-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight ml-4">Excelia</h1>
-            <p className="text-sm text-emerald-50 mt-1 ml-4">
-              Excel con IA · Presiona <kbd className="px-2 py-0.5 bg-emerald-500/50 rounded text-xs shadow-sm">Ctrl+K</kbd> para comandos
-            </p>
-          </div>
-          <div className="flex items-center gap-4 text-sm">
-            <div className="bg-emerald-500/30 px-3 py-2 rounded-lg backdrop-blur-sm">
-              <span className="text-emerald-50">Celdas: </span>
-              <span className="font-semibold">{ROWS}×{COLS}</span>
-            </div>
-            {selectedCells.length > 0 && (
-              <div className="bg-teal-400/40 px-3 py-2 rounded-lg animate-pulse backdrop-blur-sm">
-                <span className="text-white">Selección: </span>
-                <span className="font-semibold">{selectedCells.length}</span>
-              </div>
-            )}
-            <button
-              onClick={onToggleChat}
-              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg backdrop-blur-sm transition-colors"
-            >
-              <MessageCircle className="h-5 w-5" />
-              <span className="text-sm font-medium">Chat</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
+    <div className="h-full w-full flex flex-col bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50 min-h-0">
       {/* Handsontable Container */}
-      <div className="flex-1 overflow-hidden relative">
+      <div ref={containerRef} className="flex-1 overflow-hidden relative min-h-0">
         <HotTable
           ref={hotTableRef}
           settings={settings}
