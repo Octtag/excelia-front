@@ -3,9 +3,10 @@
 import { useState, useRef, useEffect } from "react"
 import ExcelGridHandsontable from "@/components/ExcelGridHandsontable"
 import ChatWindow from "@/components/ChatWindow"
-import { MessageCircle, Home } from "lucide-react"
+import { MessageCircle, Home, Download } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useSelectedCells } from "@/contexts/SelectedCellsContext"
+import * as XLSX from "xlsx"
 
 const MIN_CHAT_WIDTH = 250
 const MAX_CHAT_WIDTH = 800
@@ -20,7 +21,7 @@ export default function EditorPage({ initialData }: EditorPageProps) {
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT_WIDTH)
   const [isResizing, setIsResizing] = useState(false)
-  const { selectedCells } = useSelectedCells()
+  const { selectedCells, hotInstance } = useSelectedCells()
   const [headerHeight, setHeaderHeight] = useState(0)
   const [data, setData] = useState<string[][] | null>(initialData || null)
   const resizeRef = useRef<HTMLDivElement>(null)
@@ -89,6 +90,77 @@ export default function EditorPage({ initialData }: EditorPageProps) {
     }
   }
 
+  const handleDownloadXLSX = () => {
+    if (!hotInstance) {
+      alert("No hay datos para descargar")
+      return
+    }
+
+    try {
+      // Obtener todos los datos de Handsontable
+      let allData: any[][] = []
+      
+      if (hotInstance.getData && typeof hotInstance.getData === 'function') {
+        allData = hotInstance.getData()
+      } else {
+        // Fallback: obtener datos celda por celda
+        const ROWS = data ? data.length : 100
+        const COLS = data && data[0] ? data[0].length : 26
+        
+        for (let row = 0; row < ROWS; row++) {
+          const rowData: any[] = []
+          for (let col = 0; col < COLS; col++) {
+            const value = hotInstance.getDataAtCell(row, col)
+            rowData.push(value !== null && value !== undefined ? value : '')
+          }
+          allData.push(rowData)
+        }
+      }
+
+      // Limpiar filas y columnas vacías al final
+      // Encontrar la última fila y columna con datos
+      let lastRow = -1
+      let lastCol = -1
+      
+      for (let row = allData.length - 1; row >= 0; row--) {
+        for (let col = (allData[row]?.length || 0) - 1; col >= 0; col--) {
+          const value = allData[row]?.[col]
+          if (value !== null && value !== undefined && value !== '') {
+            lastRow = Math.max(lastRow, row)
+            lastCol = Math.max(lastCol, col)
+          }
+        }
+      }
+
+      // Si no hay datos, crear al menos una fila vacía
+      if (lastRow === -1) {
+        allData = [['']]
+        lastRow = 0
+        lastCol = 0
+      } else {
+        // Recortar a las dimensiones reales
+        allData = allData.slice(0, lastRow + 1).map(row => 
+          row.slice(0, lastCol + 1)
+        )
+      }
+
+      // Crear workbook y worksheet
+      const ws = XLSX.utils.aoa_to_sheet(allData)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
+
+      // Generar nombre de archivo con timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+      const filename = `excelia-${timestamp}.xlsx`
+
+      // Descargar el archivo
+      XLSX.writeFile(wb, filename)
+    } catch (error) {
+      console.error("Error al descargar el archivo:", error)
+      alert("Error al descargar el archivo. Por favor, intenta nuevamente.")
+    }
+  }
+
   return (
     <div className="relative h-screen w-screen overflow-hidden flex flex-col">
       {/* Header */}
@@ -114,6 +186,14 @@ export default function EditorPage({ initialData }: EditorPageProps) {
               <span className="text-emerald-50">Celdas: </span>
               <span className="font-semibold">{ROWS}×{COLS}</span>
             </div>
+            <button
+              onClick={handleDownloadXLSX}
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg backdrop-blur-sm transition-colors"
+              title="Descargar como XLSX"
+            >
+              <Download className="h-5 w-5" />
+              <span className="text-sm font-medium">Descargar</span>
+            </button>
             <button
               onClick={() => setIsChatOpen(!isChatOpen)}
               className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg backdrop-blur-sm transition-colors"
