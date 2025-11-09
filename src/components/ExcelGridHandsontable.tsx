@@ -19,7 +19,7 @@ interface ExcelGridHandsontableProps {
   isChatOpen?: boolean
   onToggleChat?: () => void
   onSelectedCellsChange?: (cells: Array<{row: number, col: number, value: string}>) => void
-  initialData?: string[][] | null
+  initialData?: string[][]
 }
 
 export default function ExcelGridHandsontable({

@@ -23,7 +23,7 @@ export default function EditorPage({ initialData }: EditorPageProps) {
   const [isResizing, setIsResizing] = useState(false)
   const { selectedCells, hotInstance } = useSelectedCells()
   const [headerHeight, setHeaderHeight] = useState(0)
-  const [data, setData] = useState<string[][] | null>(initialData || null)
+  const [data, setData] = useState<string[][] | undefined>(initialData)
   const resizeRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
 

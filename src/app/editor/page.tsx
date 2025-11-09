@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import EditorPage from "@/components/EditorPage"
 
 export default function Editor() {
-  const [initialData, setInitialData] = useState<string[][] | null>(null)
+  const [initialData, setInitialData] = useState<string[][] | undefined>(undefined)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
