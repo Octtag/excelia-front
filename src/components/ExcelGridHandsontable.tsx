@@ -30,11 +30,12 @@ export default function ExcelGridHandsontable({
   initialData
 }: ExcelGridHandsontableProps) {
   const hotTableRef = useRef<any>(null)
-  const { selectedCells, updateSelectedCellsFromHotInstance, clearSelectedCells } = useSelectedCells()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isRestoringSelectionRef = useRef(false)
+  const { selectedCells, setHotInstance, updateSelectedCellsFromHotInstance, updateSelectedCellsFromCoordinates, restoreSelection, clearSelectedCells, isProcessing, setIsProcessing } = useSelectedCells()
   const [showCommandModal, setShowCommandModal] = useState(false)
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 })
   const [selectedRange, setSelectedRange] = useState("")
-  const [isProcessing, setIsProcessing] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
 
   // Estados para selección de celdas durante edición de fórmula
@@ -87,12 +88,17 @@ export default function ExcelGridHandsontable({
     setIsMounted(true)
   }, [])
 
-  // Notificar cambios en selectedCells al componente padre
+  // Refrescar las celdas cuando cambian las celdas seleccionadas o el estado de procesamiento para aplicar el estilo
   useEffect(() => {
-    if (onSelectedCellsChange) {
-      onSelectedCellsChange(selectedCells)
-    }
-  }, [selectedCells, onSelectedCellsChange])
+    if (!isMounted) return
+    
+    const hot = hotTableRef.current?.hotInstance
+    if (!hot) return
+
+    // Forzar re-render de las celdas para aplicar los estilos de selección y procesamiento
+    hot.render()
+  }, [isMounted, selectedCells, isProcessing])
+
 
   // Detectar Ctrl+K para comando de IA
   useEffect(() => {
@@ -190,174 +196,92 @@ export default function ExcelGridHandsontable({
   }
 
   // Configuración de Handsontable
-  const settings: Handsontable.GridSettings = useMemo(() => ({
-    data: data,
-    colHeaders: true,
-    rowHeaders: true,
-    height: 'calc(100vh - 80px)',
-    width: '100%',
-    licenseKey: 'non-commercial-and-evaluation',
-    contextMenu: true,
-    manualColumnResize: true,
-    manualRowResize: true,
-    copyPaste: true,
-    undo: true,
-    search: true,
-    autoWrapRow: true,
-    autoWrapCol: true,
-    stretchH: 'all',
-    // Habilitar cálculo de fórmulas con HyperFormula
-    formulas: {
-      engine: HyperFormula,
-      sheetName: 'Sheet1'
-    },
-    // Estilo personalizado con colores verdes
-    className: 'htCenter htMiddle excelia-table',
-    cells: function() {
-      const cellProperties: any = {}
-      cellProperties.className = 'excelia-cell'
-      return cellProperties
-    },
-    // Configurar el hook de selección después de la inicialización
-    afterInit: function(this: any) {
-      const hot = this as Handsontable.Core
-      if (!hot) return
-
-      // Usar afterSelectionEnd en lugar de afterSelection para evitar loops infinitos
-      const handleSelection = () => {
-        updateSelectedCellsFromHotInstance(hot as any)
-      }
-
-      hot.addHook('afterSelectionEnd', handleSelection)
-    },
-    // Hooks para manejar selección durante edición de fórmulas
-    afterBeginEditing: function(row: number, col: number) {
-      const hot = hotTableRef.current?.hotInstance
-      if (!hot) return
-
-      // Guardar referencia al editor y configurar listener
-      setTimeout(() => {
-        const editor = hot.getActiveEditor()
-        if (editor && editor.TEXTAREA) {
-          editorRef.current = editor.TEXTAREA
-          const cellValue = editor.TEXTAREA.value
-
-          // Detectar si estamos editando una fórmula (comienza con =, + o -)
-          if (cellValue && isFormula(cellValue)) {
-            isEditingFormulaRef.current = true
-            editingCellRef.current = { row, col }
-          }
-
-          // Agregar listener para detectar cuando se empieza a escribir una fórmula
-          const inputListener = (e: Event) => {
-            const target = e.target as HTMLTextAreaElement
-            if (isFormula(target.value)) {
-              isEditingFormulaRef.current = true
-              editingCellRef.current = { row, col }
-            } else {
-              isEditingFormulaRef.current = false
-              editingCellRef.current = null
-            }
-          }
-
-          editor.TEXTAREA.addEventListener('input', inputListener)
-
-          // Cleanup listener cuando se cierra el editor
-          const cleanup = () => {
-            editor.TEXTAREA?.removeEventListener('input', inputListener)
-          }
-
-          // Guardar cleanup para llamarlo después
-          setTimeout(() => {
-            if (!hot.isListening()) {
-              cleanup()
-            }
-          }, 100)
-        }
-      }, 0)
-    },
-    afterSelectionEnd: function(row: number, col: number, row2: number, col2: number) {
-      if (!isEditingFormulaRef.current || !editingCellRef.current || !editorRef.current) return
-
-      const hot = hotTableRef.current?.hotInstance
-      if (!hot) return
-
-      const editingCell = editingCellRef.current
-
-      // No hacer nada si estamos seleccionando la celda que estamos editando
-      if (row === editingCell.row && col === editingCell.col &&
-          row2 === editingCell.row && col2 === editingCell.col) {
-        return
-      }
-
-      // Formatear la referencia de la celda/rango seleccionado
-      const cellRef = formatRange([row, col, row2, col2])
-
-      // Insertar la referencia en la posición del cursor en el editor
-      const editor = editorRef.current
-      const cursorPos = editor.selectionStart || editor.value.length
-      const currentValue = editor.value
-      const newValue = currentValue.slice(0, cursorPos) + cellRef + currentValue.slice(cursorPos)
-
-      editor.value = newValue
-      editor.focus()
-
-      // Posicionar el cursor después de la referencia insertada
-      const newCursorPos = cursorPos + cellRef.length
-      editor.setSelectionRange(newCursorPos, newCursorPos)
-
-      // Trigger input event para que Handsontable detecte el cambio
-      const event = new Event('input', { bubbles: true })
-      editor.dispatchEvent(event)
-
-      // Volver a seleccionar la celda que estamos editando
-      setTimeout(() => {
-        hot.selectCell(editingCell.row, editingCell.col)
-      }, 0)
-    },
-    afterChange: function(changes: any, source: string) {
-      if (!changes) return
-
-      const hot = hotTableRef.current?.hotInstance
-      if (!hot) return
-
-      // Detectar cuando se empieza a escribir una fórmula
-      changes.forEach((change: any) => {
-        const [row, col, , newValue] = change
-        if (newValue && isFormula(String(newValue)) && source === 'edit') {
-          isEditingFormulaRef.current = true
-          editingCellRef.current = { row, col }
-
-          const editor = hot.getActiveEditor()
-          if (editor && editor.TEXTAREA) {
-            editorRef.current = editor.TEXTAREA
+  const settings: Handsontable.GridSettings = useMemo(() => {
+    // Capturar el ref en el closure del useMemo
+    const restoringRef = isRestoringSelectionRef
+    
+    return {
+      data: data,
+      colHeaders: true,
+      rowHeaders: true,
+      height: 'calc(100vh - 80px)',
+      width: '100%',
+      licenseKey: 'non-commercial-and-evaluation',
+      contextMenu: true,
+      manualColumnResize: true,
+      manualRowResize: true,
+      copyPaste: true,
+      undo: true,
+      search: true,
+      autoWrapRow: true,
+      autoWrapCol: true,
+      stretchH: 'all',
+      // Estilo personalizado con colores verdes
+      className: 'htCenter htMiddle excelia-table',
+      cells: function(row, col) {
+        const cellProperties: any = {}
+        cellProperties.className = 'excelia-cell'
+        
+        // Verificar si esta celda está en las celdas seleccionadas
+        const isSelected = selectedCells.some(cell => cell.row === row && cell.col === col)
+        if (isSelected) {
+          cellProperties.className += ' excelia-selected-cell'
+          // Agregar clase de pulso cuando está procesando
+          if (isProcessing) {
+            cellProperties.className += ' excelia-processing-cell'
           }
         }
-      })
-    },
-    beforeChange: function(changes: any, source: string) {
-      // Resetear estado cuando se termina la edición
-      if (source === 'edit' && changes) {
-        const editingCell = editingCellRef.current
-        changes.forEach((change: any) => {
-          const [row, col] = change
-          // Si terminamos de editar la celda actual
-          if (editingCell && row === editingCell.row && col === editingCell.col) {
+        
+        return cellProperties
+      },
+      // Configurar el hook de selección después de la inicialización
+      afterInit: function(this: any) {
+        const hot = this as Handsontable.Core
+        if (!hot) return
+
+        // Guardar la instancia en el contexto
+        setHotInstance(hot as any)
+
+        // Usar afterSelection hook para actualizar las celdas seleccionadas
+        // afterSelection(r, c, r2, c2, preventScrolling, selectionLayerLevel)
+        // Referencia: https://handsontable.com/docs/javascript-data-grid/api/hooks/#afterselection
+        const handleSelection = (r: number, c: number, r2: number, c2: number) => {
+          // Validar coordenadas antes de actualizar
+          if (r >= 0 && c >= 0 && r2 >= 0 && c2 >= 0) {
+            // Usar las coordenadas directamente del hook para actualizar las celdas seleccionadas
+            updateSelectedCellsFromCoordinates(hot as any, r, c, r2, c2)
+          }
+        }
+
+        // Usar afterDeselect hook para restaurar la selección cuando se deselecciona
+        const handleDeselect = () => {
+          // Solo restaurar si no estamos restaurando programáticamente
+          if (!restoringRef.current) {
+            // Usar setTimeout para evitar loops infinitos
             setTimeout(() => {
-              isEditingFormulaRef.current = false
-              editingCellRef.current = null
-              editorRef.current = null
-            }, 100)
+              const currentSelected = hot.getSelected() || []
+              if (currentSelected.length === 0) {
+                // Marcar que estamos restaurando programáticamente
+                restoringRef.current = true
+                restoreSelection()
+                setTimeout(() => {
+                  restoringRef.current = false
+                }, 100)
+              }
+            }, 0)
           }
-        })
+        }
+
+        hot.addHook('afterSelection', handleSelection)
+        hot.addHook('afterDeselect', handleDeselect)
       }
     }
-  }), [data, updateSelectedCellsFromHotInstance])
+  }, [data, updateSelectedCellsFromCoordinates, restoreSelection, setHotInstance, selectedCells, isProcessing])
 
   return (
     <div className="h-screen w-screen flex flex-col bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
       {/* Handsontable Container */}
-      <div className="flex-1 overflow-hidden relative">
+      <div ref={containerRef} className="flex-1 overflow-hidden relative">
         {isMounted ? (
           <HotTable
             ref={hotTableRef}
@@ -416,6 +340,27 @@ export default function ExcelGridHandsontable({
         
         .excelia-cell:hover {
           background-color: #f9fafb !important;
+        }
+        
+        .excelia-selected-cell {
+          background-color: #dbeafe !important;
+        }
+        
+        .excelia-selected-cell:hover {
+          background-color: #bfdbfe !important;
+        }
+        
+        .excelia-processing-cell {
+          animation: pulse-processing 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-processing {
+          0%, 100% {
+            background-color: #dbeafe !important;
+          }
+          50% {
+            background-color: #60a5fa !important;
+          }
         }
       `}</style>
     </div>
