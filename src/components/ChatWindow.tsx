@@ -14,10 +14,16 @@ interface ChatWindowProps {
   onClose: () => void
 }
 
+interface Message {
+  id: number
+  text: string
+  sender: "user" | "assistant"
+}
+
 const COLS = 26
 
 export default function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
-  const firstMessage =     {
+  const firstMessage: Message = {
     id: 1,
     text: `**¡Hola!** Soy un asistente experto en análisis de datos de hojas de cálculo Excel.
 
@@ -30,7 +36,7 @@ Puedo ayudarte a:
 Para empezar, por favor, dime qué te gustaría analizar o qué pregunta tienes sobre los datos de la hoja de cálculo.`,
     sender: "assistant"
   }
-  const [messages, setMessages] = React.useState<Array<{ id: number; text: string; sender: "user" | "assistant" }>>([])
+  const [messages, setMessages] = React.useState<Array<Message>>([firstMessage])
   const [inputValue, setInputValue] = React.useState("")
   const [copiedTableId, setCopiedTableId] = React.useState<string | null>(null)
   const { selectedCells, allCells, restoreSelection, clearSelectedCells, hotInstance, isProcessing, setIsProcessing, updateAllCells } = useSelectedCells()
@@ -384,46 +390,46 @@ Para empezar, por favor, dime qué te gustaría analizar o qué pregunta tienes 
                         components={{
                           h1: ({node, ...props}: any) => {
                             const children = React.Children.toArray(props.children)
-                            const processedChildren = children.map((child: any) => {
+                            const processedChildren = children.map((child: any, index: number) => {
                               if (typeof child === 'string') {
                                 const processed = processTextWithSelectRange(child)
-                                return renderProcessedText(processed)
+                                return <React.Fragment key={`h1-${index}`}>{renderProcessedText(processed)}</React.Fragment>
                               }
-                              return child
+                              return <React.Fragment key={`h1-${index}`}>{child}</React.Fragment>
                             })
                             return <h1 className="text-lg font-semibold mb-2 mt-3 text-gray-900" {...props}>{processedChildren}</h1>
                           },
                           h2: ({node, ...props}: any) => {
                             const children = React.Children.toArray(props.children)
-                            const processedChildren = children.map((child: any) => {
+                            const processedChildren = children.map((child: any, index: number) => {
                               if (typeof child === 'string') {
                                 const processed = processTextWithSelectRange(child)
-                                return renderProcessedText(processed)
+                                return <React.Fragment key={`h2-${index}`}>{renderProcessedText(processed)}</React.Fragment>
                               }
-                              return child
+                              return <React.Fragment key={`h2-${index}`}>{child}</React.Fragment>
                             })
                             return <h2 className="text-base font-semibold mb-2 mt-3 text-gray-900" {...props}>{processedChildren}</h2>
                           },
                           h3: ({node, ...props}: any) => {
                             const children = React.Children.toArray(props.children)
-                            const processedChildren = children.map((child: any) => {
+                            const processedChildren = children.map((child: any, index: number) => {
                               if (typeof child === 'string') {
                                 const processed = processTextWithSelectRange(child)
-                                return renderProcessedText(processed)
+                                return <React.Fragment key={`h3-${index}`}>{renderProcessedText(processed)}</React.Fragment>
                               }
-                              return child
+                              return <React.Fragment key={`h3-${index}`}>{child}</React.Fragment>
                             })
                             return <h3 className="text-sm font-semibold mb-1 mt-2 text-gray-900" {...props}>{processedChildren}</h3>
                           },
                           p: ({node, ...props}: any) => {
                             const children = React.Children.toArray(props.children)
-                            const processedChildren = children.map((child: any) => {
+                            const processedChildren = children.map((child: any, index: number) => {
                               if (typeof child === 'string') {
                                 // Procesar el texto para reemplazar etiquetas selectRange
                                 const processed = processTextWithSelectRange(child)
-                                return renderProcessedText(processed)
+                                return <React.Fragment key={`p-${index}`}>{renderProcessedText(processed)}</React.Fragment>
                               }
-                              return child
+                              return <React.Fragment key={`p-${index}`}>{child}</React.Fragment>
                             })
                             return <p className="mb-2 text-gray-900 leading-relaxed" {...props}>{processedChildren}</p>
                           },
@@ -439,12 +445,12 @@ Para empezar, por favor, dime qué te gustaría analizar o qué pregunta tienes 
                           ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2 space-y-1 text-gray-900" {...props} />,
                           li: ({node, ...props}: any) => {
                             const children = React.Children.toArray(props.children)
-                            const processedChildren = children.map((child: any) => {
+                            const processedChildren = children.map((child: any, index: number) => {
                               if (typeof child === 'string') {
                                 const processed = processTextWithSelectRange(child)
-                                return renderProcessedText(processed)
+                                return <React.Fragment key={`li-${index}`}>{renderProcessedText(processed)}</React.Fragment>
                               }
-                              return child
+                              return <React.Fragment key={`li-${index}`}>{child}</React.Fragment>
                             })
                             return <li className="text-gray-900" {...props}>{processedChildren}</li>
                           },
@@ -457,12 +463,12 @@ Para empezar, por favor, dime qué te gustaría analizar o qué pregunta tienes 
                           pre: ({node, ...props}) => <pre className="bg-gray-100 border border-gray-200 rounded p-2 overflow-x-auto mb-2" {...props} />,
                           strong: ({node, ...props}: any) => {
                             const children = React.Children.toArray(props.children)
-                            const processedChildren = children.map((child: any) => {
+                            const processedChildren = children.map((child: any, index: number) => {
                               if (typeof child === 'string') {
                                 const processed = processTextWithSelectRange(child)
-                                return renderProcessedText(processed)
+                                return <React.Fragment key={`strong-${index}`}>{renderProcessedText(processed)}</React.Fragment>
                               }
-                              return child
+                              return <React.Fragment key={`strong-${index}`}>{child}</React.Fragment>
                             })
                             return <strong className="font-semibold text-gray-900" {...props}>{processedChildren}</strong>
                           },
@@ -470,12 +476,12 @@ Para empezar, por favor, dime qué te gustaría analizar o qué pregunta tienes 
                           a: ({node, ...props}) => <a className="text-emerald-600 underline hover:text-emerald-700" {...props} />,
                           blockquote: ({node, ...props}: any) => {
                             const children = React.Children.toArray(props.children)
-                            const processedChildren = children.map((child: any) => {
+                            const processedChildren = children.map((child: any, index: number) => {
                               if (typeof child === 'string') {
                                 const processed = processTextWithSelectRange(child)
-                                return renderProcessedText(processed)
+                                return <React.Fragment key={`blockquote-${index}`}>{renderProcessedText(processed)}</React.Fragment>
                               }
-                              return child
+                              return <React.Fragment key={`blockquote-${index}`}>{child}</React.Fragment>
                             })
                             return <blockquote className="border-l-4 border-emerald-300 pl-3 italic my-2 text-gray-700" {...props}>{processedChildren}</blockquote>
                           },

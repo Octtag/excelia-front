@@ -9,7 +9,7 @@ import { useSelectedCells } from "@/contexts/SelectedCellsContext"
 
 const MIN_CHAT_WIDTH = 250
 const MAX_CHAT_WIDTH = 800
-const DEFAULT_CHAT_WIDTH = 350
+const DEFAULT_CHAT_WIDTH = 450
 
 interface EditorPageProps {
   initialData?: string[][]
