@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { HotTable } from '@handsontable/react'
 import { registerAllModules } from 'handsontable/registry'
 import 'handsontable/dist/handsontable.full.min.css'
@@ -17,7 +17,7 @@ const COLS = 26
 
 export default function ExcelGridHandsontable() {
   const hotTableRef = useRef<any>(null)
-  const { selectedCells, setSelectedCells, clearSelectedCells } = useSelectedCells()
+  const { selectedCells, updateSelectedCellsFromHotInstance, clearSelectedCells } = useSelectedCells()
   const [showCommandModal, setShowCommandModal] = useState(false)
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 })
   const [selectedRange, setSelectedRange] = useState("")
@@ -58,6 +58,7 @@ export default function ExcelGridHandsontable() {
     setIsMounted(true)
   }, [])
 
+
   // Detectar Ctrl+K para comando de IA
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -72,20 +73,10 @@ export default function ExcelGridHandsontable() {
         const selected = hot.getSelected() || []
         if (selected.length === 0) return
 
-        const [startRow, startCol, endRow, endCol] = selected[0]
+        // Actualizar celdas seleccionadas usando el contexto
+        updateSelectedCellsFromHotInstance(hot)
 
-        // Extraer celdas seleccionadas
-        const cells: Array<{row: number, col: number, value: string}> = []
-        for (let row = Math.min(startRow, endRow); row <= Math.max(startRow, endRow); row++) {
-          for (let col = Math.min(startCol, endCol); col <= Math.max(startCol, endCol); col++) {
-            const value = hot.getDataAtCell(row, col)
-            cells.push({
-              row,
-              col,
-              value: value ? String(value) : ''
-            })
-          }
-        }
+        const [startRow, startCol] = selected[0]
 
         // Calcular posición del modal cerca de la celda
         const cellCoords = hot.getCell(startRow, startCol)
@@ -97,7 +88,6 @@ export default function ExcelGridHandsontable() {
           })
         }
 
-        setSelectedCells(cells)
         setSelectedRange(formatRange(selected[0]))
         setShowCommandModal(true)
         
@@ -107,7 +97,7 @@ export default function ExcelGridHandsontable() {
 
     window.addEventListener("keydown", handleKeyDown, { capture: true })
     return () => window.removeEventListener("keydown", handleKeyDown, { capture: true })
-  }, [formatRange])
+  }, [formatRange, updateSelectedCellsFromHotInstance])
 
   const handleCloseModal = useCallback(() => {
     setShowCommandModal(false)
@@ -165,7 +155,7 @@ export default function ExcelGridHandsontable() {
   }
 
   // Configuración de Handsontable
-  const settings: Handsontable.GridSettings = {
+  const settings: Handsontable.GridSettings = useMemo(() => ({
     data: data,
     colHeaders: true,
     rowHeaders: true,
@@ -187,8 +177,20 @@ export default function ExcelGridHandsontable() {
       const cellProperties: any = {}
       cellProperties.className = 'excelia-cell'
       return cellProperties
+    },
+    // Configurar el hook de selección después de la inicialización
+    afterInit: function(this: any) {
+      const hot = this as Handsontable.Core
+      if (!hot) return
+
+      // Usar afterSelectionEnd en lugar de afterSelection para evitar loops infinitos
+      const handleSelection = () => {
+        updateSelectedCellsFromHotInstance(hot as any)
+      }
+
+      hot.addHook('afterSelectionEnd', handleSelection)
     }
-  }
+  }), [data, updateSelectedCellsFromHotInstance])
 
   return (
     <div className="h-screen w-screen flex flex-col bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">

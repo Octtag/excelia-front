@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { X, Send } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, formatCellRanges } from "@/lib/utils"
+import { useSelectedCells } from "@/contexts/SelectedCellsContext"
 
 interface ChatWindowProps {
   isOpen: boolean
@@ -12,6 +13,14 @@ interface ChatWindowProps {
 export default function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
   const [messages, setMessages] = React.useState<Array<{ id: number; text: string; sender: "user" | "assistant" }>>([])
   const [inputValue, setInputValue] = React.useState("")
+  const { selectedCells } = useSelectedCells()
+  
+  // Format selected cells into range string
+  const selectedRange = React.useMemo(() => {
+    if (selectedCells.length === 0) return ""
+    const ranges = formatCellRanges(selectedCells)
+    return ranges.join(", ")
+  }, [selectedCells])
 
   const handleSend = () => {
     if (!inputValue.trim()) return
@@ -36,15 +45,34 @@ export default function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
   return (
     <div className="h-full w-full bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50 shadow-2xl flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between py-2 border-b border-emerald-200 bg-primary-500 text-white shadow-lg">
-        <h2 className="text-lg font-semibold">Chat</h2>
-        <button
-          onClick={onClose}
-          className="rounded-sm opacity-70 hover:opacity-100 transition-opacity focus:outline-none focus:ring-2 focus:ring-emerald-300 p-1 text-white"
-        >
-          <X className="h-5 w-5" />
-          <span className="sr-only">Close</span>
-        </button>
+      <div className="flex flex-col border-b border-emerald-200 bg-primary-500 text-white shadow-lg">
+        <div className="flex items-center justify-between py-2 px-4">
+          <h2 className="text-lg font-semibold">Chat</h2>
+          <button
+            onClick={onClose}
+            className="rounded-sm opacity-70 hover:opacity-100 transition-opacity focus:outline-none focus:ring-2 focus:ring-emerald-300 p-1 text-white"
+          >
+            <X className="h-5 w-5" />
+            <span className="sr-only">Close</span>
+          </button>
+        </div>
+        
+        {/* Selected Range Display */}
+        {selectedRange && (
+          <div className="px-4 pb-2 flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white/20 border border-white/30 rounded-lg backdrop-blur-sm">
+              <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span className="text-xs font-mono font-semibold text-white">
+                {selectedRange}
+              </span>
+            </div>
+            <span className="text-xs text-white/80 font-medium">
+              {selectedCells.length} {selectedCells.length === 1 ? 'celda' : 'celdas'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Messages Area */}
