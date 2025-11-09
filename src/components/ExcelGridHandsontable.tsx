@@ -17,11 +17,12 @@ const COLS = 26
 
 export default function ExcelGridHandsontable() {
   const hotTableRef = useRef<any>(null)
-  const { selectedCells, updateSelectedCellsFromHotInstance, clearSelectedCells } = useSelectedCells()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isRestoringSelectionRef = useRef(false)
+  const { selectedCells, setHotInstance, updateSelectedCellsFromHotInstance, updateSelectedCellsFromCoordinates, restoreSelection, clearSelectedCells, isProcessing, setIsProcessing } = useSelectedCells()
   const [showCommandModal, setShowCommandModal] = useState(false)
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 })
   const [selectedRange, setSelectedRange] = useState("")
-  const [isProcessing, setIsProcessing] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
 
   // Datos iniciales vacíos
@@ -57,6 +58,17 @@ export default function ExcelGridHandsontable() {
   useEffect(() => {
     setIsMounted(true)
   }, [])
+
+  // Refrescar las celdas cuando cambian las celdas seleccionadas o el estado de procesamiento para aplicar el estilo
+  useEffect(() => {
+    if (!isMounted) return
+    
+    const hot = hotTableRef.current?.hotInstance
+    if (!hot) return
+
+    // Forzar re-render de las celdas para aplicar los estilos de selección y procesamiento
+    hot.render()
+  }, [isMounted, selectedCells, isProcessing])
 
 
   // Detectar Ctrl+K para comando de IA
@@ -155,47 +167,92 @@ export default function ExcelGridHandsontable() {
   }
 
   // Configuración de Handsontable
-  const settings: Handsontable.GridSettings = useMemo(() => ({
-    data: data,
-    colHeaders: true,
-    rowHeaders: true,
-    height: 'calc(100vh - 80px)',
-    width: '100%',
-    licenseKey: 'non-commercial-and-evaluation',
-    contextMenu: true,
-    manualColumnResize: true,
-    manualRowResize: true,
-    copyPaste: true,
-    undo: true,
-    search: true,
-    autoWrapRow: true,
-    autoWrapCol: true,
-    stretchH: 'all',
-    // Estilo personalizado con colores verdes
-    className: 'htCenter htMiddle excelia-table',
-    cells: function(row, col) {
-      const cellProperties: any = {}
-      cellProperties.className = 'excelia-cell'
-      return cellProperties
-    },
-    // Configurar el hook de selección después de la inicialización
-    afterInit: function(this: any) {
-      const hot = this as Handsontable.Core
-      if (!hot) return
+  const settings: Handsontable.GridSettings = useMemo(() => {
+    // Capturar el ref en el closure del useMemo
+    const restoringRef = isRestoringSelectionRef
+    
+    return {
+      data: data,
+      colHeaders: true,
+      rowHeaders: true,
+      height: 'calc(100vh - 80px)',
+      width: '100%',
+      licenseKey: 'non-commercial-and-evaluation',
+      contextMenu: true,
+      manualColumnResize: true,
+      manualRowResize: true,
+      copyPaste: true,
+      undo: true,
+      search: true,
+      autoWrapRow: true,
+      autoWrapCol: true,
+      stretchH: 'all',
+      // Estilo personalizado con colores verdes
+      className: 'htCenter htMiddle excelia-table',
+      cells: function(row, col) {
+        const cellProperties: any = {}
+        cellProperties.className = 'excelia-cell'
+        
+        // Verificar si esta celda está en las celdas seleccionadas
+        const isSelected = selectedCells.some(cell => cell.row === row && cell.col === col)
+        if (isSelected) {
+          cellProperties.className += ' excelia-selected-cell'
+          // Agregar clase de pulso cuando está procesando
+          if (isProcessing) {
+            cellProperties.className += ' excelia-processing-cell'
+          }
+        }
+        
+        return cellProperties
+      },
+      // Configurar el hook de selección después de la inicialización
+      afterInit: function(this: any) {
+        const hot = this as Handsontable.Core
+        if (!hot) return
 
-      // Usar afterSelectionEnd en lugar de afterSelection para evitar loops infinitos
-      const handleSelection = () => {
-        updateSelectedCellsFromHotInstance(hot as any)
+        // Guardar la instancia en el contexto
+        setHotInstance(hot as any)
+
+        // Usar afterSelection hook para actualizar las celdas seleccionadas
+        // afterSelection(r, c, r2, c2, preventScrolling, selectionLayerLevel)
+        // Referencia: https://handsontable.com/docs/javascript-data-grid/api/hooks/#afterselection
+        const handleSelection = (r: number, c: number, r2: number, c2: number) => {
+          // Validar coordenadas antes de actualizar
+          if (r >= 0 && c >= 0 && r2 >= 0 && c2 >= 0) {
+            // Usar las coordenadas directamente del hook para actualizar las celdas seleccionadas
+            updateSelectedCellsFromCoordinates(hot as any, r, c, r2, c2)
+          }
+        }
+
+        // Usar afterDeselect hook para restaurar la selección cuando se deselecciona
+        const handleDeselect = () => {
+          // Solo restaurar si no estamos restaurando programáticamente
+          if (!restoringRef.current) {
+            // Usar setTimeout para evitar loops infinitos
+            setTimeout(() => {
+              const currentSelected = hot.getSelected() || []
+              if (currentSelected.length === 0) {
+                // Marcar que estamos restaurando programáticamente
+                restoringRef.current = true
+                restoreSelection()
+                setTimeout(() => {
+                  restoringRef.current = false
+                }, 100)
+              }
+            }, 0)
+          }
+        }
+
+        hot.addHook('afterSelection', handleSelection)
+        hot.addHook('afterDeselect', handleDeselect)
       }
-
-      hot.addHook('afterSelectionEnd', handleSelection)
     }
-  }), [data, updateSelectedCellsFromHotInstance])
+  }, [data, updateSelectedCellsFromCoordinates, restoreSelection, setHotInstance, selectedCells, isProcessing])
 
   return (
     <div className="h-screen w-screen flex flex-col bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
       {/* Handsontable Container */}
-      <div className="flex-1 overflow-hidden relative">
+      <div ref={containerRef} className="flex-1 overflow-hidden relative">
         {isMounted ? (
           <HotTable
             ref={hotTableRef}
@@ -254,6 +311,27 @@ export default function ExcelGridHandsontable() {
         
         .excelia-cell:hover {
           background-color: #f9fafb !important;
+        }
+        
+        .excelia-selected-cell {
+          background-color: #dbeafe !important;
+        }
+        
+        .excelia-selected-cell:hover {
+          background-color: #bfdbfe !important;
+        }
+        
+        .excelia-processing-cell {
+          animation: pulse-processing 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-processing {
+          0%, 100% {
+            background-color: #dbeafe !important;
+          }
+          50% {
+            background-color: #60a5fa !important;
+          }
         }
       `}</style>
     </div>
