@@ -5,6 +5,7 @@ import { HotTable } from '@handsontable/react'
 import { registerAllModules } from 'handsontable/registry'
 import 'handsontable/dist/handsontable.full.min.css'
 import Handsontable from 'handsontable'
+import { MessageCircle } from "lucide-react"
 
 // Registrar todos los módulos de Handsontable
 registerAllModules()
@@ -12,7 +13,12 @@ registerAllModules()
 const ROWS = 100
 const COLS = 26
 
-export default function ExcelGridHandsontable() {
+interface ExcelGridHandsontableProps {
+  isChatOpen: boolean
+  onToggleChat: () => void
+}
+
+export default function ExcelGridHandsontable({ isChatOpen, onToggleChat }: ExcelGridHandsontableProps) {
   const hotTableRef = useRef<HotTable>(null)
   const [selectedCells, setSelectedCells] = useState<Array<{row: number, col: number, value: string}>>([])
   const [showCommandModal, setShowCommandModal] = useState(false)
@@ -158,7 +164,7 @@ export default function ExcelGridHandsontable() {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
+    <div className="h-full w-full flex flex-col bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
       {/* Header */}
       <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white px-8 py-4 shadow-lg">
         <div className="flex items-center justify-between ml-4">
@@ -179,6 +185,13 @@ export default function ExcelGridHandsontable() {
                 <span className="font-semibold">{selectedCells.length}</span>
               </div>
             )}
+            <button
+              onClick={onToggleChat}
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg backdrop-blur-sm transition-colors"
+            >
+              <MessageCircle className="h-5 w-5" />
+              <span className="text-sm font-medium">Chat</span>
+            </button>
           </div>
         </div>
       </div>
