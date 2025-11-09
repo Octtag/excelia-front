@@ -5,6 +5,7 @@ import { FileSpreadsheet, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useRef } from "react"
 import * as XLSX from "xlsx"
+import Image from "next/image"
 
 export default function LandingPage() {
   const router = useRouter()
@@ -48,8 +49,35 @@ export default function LandingPage() {
             raw: false // Convertir todo a strings
           }) as string[][]
 
-          // Guardar los datos en sessionStorage para pasarlos al editor
-          sessionStorage.setItem("excelData", JSON.stringify(jsonData))
+          // Calcular dimensiones necesarias
+          const dataRows = jsonData.length
+          const dataCols = Math.max(...jsonData.map(row => row.length), 0)
+
+          // Calcular filas y columnas visibles aproximadas
+          // Asumiendo ~25px por fila y ~100px por columna en promedio
+          const viewportHeight = window.innerHeight - 150 // Restar header y márgenes
+          const viewportWidth = window.innerWidth
+          const visibleRows = Math.ceil(viewportHeight / 25)
+          const visibleCols = Math.ceil(viewportWidth / 100)
+
+          // Calcular el tamaño mínimo: máximo entre datos y viewport, más 50%
+          const minRows = Math.max(dataRows, visibleRows)
+          const minCols = Math.max(dataCols, visibleCols)
+          const totalRows = Math.ceil(minRows * 1.5)
+          const totalCols = Math.ceil(minCols * 1.5)
+
+          // Expandir el array con celdas vacías
+          const expandedData: string[][] = []
+          for (let i = 0; i < totalRows; i++) {
+            const row: string[] = []
+            for (let j = 0; j < totalCols; j++) {
+              row.push(jsonData[i]?.[j] || "")
+            }
+            expandedData.push(row)
+          }
+
+          // Guardar los datos expandidos en sessionStorage
+          sessionStorage.setItem("excelData", JSON.stringify(expandedData))
 
           // Redirigir al editor
           router.push("/editor")
@@ -90,8 +118,27 @@ export default function LandingPage() {
           transition={{ delay: 0.2, duration: 0.5 }}
           className="text-center mb-12"
         >
+          {/* Logo */}
+          <div className="flex justify-center mb-6">
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.5 }}
+              className="relative w-32 h-32"
+            >
+              <Image
+                src="https://simplepassbucket.s3.amazonaws.com/img/eventos/eventImage_20251109_002039_294_26588048.png"
+                alt="Excelia Logo"
+                width={128}
+                height={128}
+                className="object-contain"
+                priority
+              />
+            </motion.div>
+          </div>
+          
           <h1 className="text-6xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent mb-4">
-            Excel IA
+            Excelia
           </h1>
           <p className="text-xl text-gray-600 font-light">
             ¿Qué querés hacer hoy?
