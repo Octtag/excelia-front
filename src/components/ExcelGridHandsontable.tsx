@@ -5,6 +5,8 @@ import { HotTable } from '@handsontable/react'
 import { registerAllModules } from 'handsontable/registry'
 import 'handsontable/dist/handsontable.full.min.css'
 import Handsontable from 'handsontable'
+import CommandPalette from "@/components/CommandPalette"
+import KeyboardHint from "@/components/KeyboardHint"
 
 // Registrar todos los módulos de Handsontable
 registerAllModules()
@@ -13,23 +15,55 @@ const ROWS = 100
 const COLS = 26
 
 export default function ExcelGridHandsontable() {
-  const hotTableRef = useRef<HotTable>(null)
+  const hotTableRef = useRef<any>(null)
   const [selectedCells, setSelectedCells] = useState<Array<{row: number, col: number, value: string}>>([])
   const [showCommandModal, setShowCommandModal] = useState(false)
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 })
-  const [command, setCommand] = useState("")
+  const [selectedRange, setSelectedRange] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   // Datos iniciales vacíos
   const [data, setData] = useState<string[][]>(() => 
     Array(ROWS).fill(null).map(() => Array(COLS).fill(''))
   )
 
+  // Convertir número de columna a letra (0->A, 1->B, ..., 25->Z, 26->AA)
+  const getColumnLabel = useCallback((col: number): string => {
+    let label = ''
+    let num = col
+    while (num >= 0) {
+      label = String.fromCharCode(65 + (num % 26)) + label
+      num = Math.floor(num / 26) - 1
+    }
+    return label
+  }, [])
+
+  // Formatear rango de selección (ej: "A1:C5" o "B3")
+  const formatRange = useCallback((selection: [number, number, number, number]): string => {
+    const [startRow, startCol, endRow, endCol] = selection
+    const startLabel = `${getColumnLabel(startCol)}${startRow + 1}`
+
+    if (startRow === endRow && startCol === endCol) {
+      return startLabel
+    }
+
+    const endLabel = `${getColumnLabel(endCol)}${endRow + 1}`
+    return `${startLabel}:${endLabel}`
+  }, [getColumnLabel])
+
+  // Only render Handsontable on the client
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
   // Detectar Ctrl+K para comando de IA
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
         e.preventDefault()
+        e.stopPropagation()
+        e.stopImmediatePropagation()
         
         const hot = hotTableRef.current?.hotInstance
         if (!hot) return
@@ -37,51 +71,50 @@ export default function ExcelGridHandsontable() {
         const selected = hot.getSelected() || []
         if (selected.length === 0) return
 
+        const [startRow, startCol, endRow, endCol] = selected[0]
+
         // Extraer celdas seleccionadas
         const cells: Array<{row: number, col: number, value: string}> = []
-        selected.forEach(([startRow, startCol, endRow, endCol]) => {
-          for (let row = Math.min(startRow, endRow); row <= Math.max(startRow, endRow); row++) {
-            for (let col = Math.min(startCol, endCol); col <= Math.max(startCol, endCol); col++) {
-              const value = hot.getDataAtCell(row, col)
-              cells.push({
-                row,
-                col,
-                value: value ? String(value) : ''
-              })
-            }
+        for (let row = Math.min(startRow, endRow); row <= Math.max(startRow, endRow); row++) {
+          for (let col = Math.min(startCol, endCol); col <= Math.max(startCol, endCol); col++) {
+            const value = hot.getDataAtCell(row, col)
+            cells.push({
+              row,
+              col,
+              value: value ? String(value) : ''
+            })
           }
-        })
+        }
+
+        // Calcular posición del modal cerca de la celda
+        const cellCoords = hot.getCell(startRow, startCol)
+        if (cellCoords) {
+          const rect = cellCoords.getBoundingClientRect()
+          setModalPosition({
+            x: rect.left,
+            y: rect.top
+          })
+        }
 
         setSelectedCells(cells)
-        calculateModalPosition(selected[0])
+        setSelectedRange(formatRange(selected[0]))
         setShowCommandModal(true)
-      }
-
-      // ESC para cerrar
-      if (e.key === "Escape") {
-        setShowCommandModal(false)
-        setCommand("")
+        
+        return false
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
+    window.addEventListener("keydown", handleKeyDown, { capture: true })
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true })
+  }, [formatRange])
+
+  const handleCloseModal = useCallback(() => {
+    setShowCommandModal(false)
+    setSelectedCells([])
+    setSelectedRange("")
   }, [])
 
-  const calculateModalPosition = (selection: [number, number, number, number]) => {
-    const [startRow, startCol] = selection
-    const cellCoords = hotTableRef.current?.hotInstance?.getCell(startRow, startCol)
-    
-    if (cellCoords) {
-      const rect = cellCoords.getBoundingClientRect()
-      setModalPosition({
-        x: rect.left,
-        y: Math.max(rect.top - 10, 80)
-      })
-    }
-  }
-
-  const handleExecuteCommand = async () => {
+  const handleExecuteCommand = async (command: string) => {
     setIsProcessing(true)
 
     try {
@@ -126,8 +159,7 @@ export default function ExcelGridHandsontable() {
       alert("Error al procesar el comando. Verifica que el backend esté corriendo.")
     } finally {
       setIsProcessing(false)
-      setShowCommandModal(false)
-      setCommand("")
+      handleCloseModal()
     }
   }
 
@@ -164,8 +196,10 @@ export default function ExcelGridHandsontable() {
         <div className="flex items-center justify-between ml-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight ml-4">Excelia</h1>
-            <p className="text-sm text-emerald-50 mt-1 ml-4">
-              Excel con IA · Presiona <kbd className="px-2 py-0.5 bg-emerald-500/50 rounded text-xs shadow-sm">Ctrl+K</kbd> para comandos
+            <p className="text-sm text-emerald-50 mt-1 ml-4 flex items-center gap-3">
+              <span>Excel con IA</span>
+              <span className="text-emerald-200/50">•</span>
+              <KeyboardHint keys={['Ctrl', 'K']} action="comandos" variant="compact" />
             </p>
           </div>
           <div className="flex items-center gap-4 text-sm">
@@ -175,7 +209,7 @@ export default function ExcelGridHandsontable() {
             </div>
             {selectedCells.length > 0 && (
               <div className="bg-teal-400/40 px-3 py-2 rounded-lg animate-pulse backdrop-blur-sm">
-                <span className="text-white">Selección: </span>
+                <span className="text-white">Seleccion: </span>
                 <span className="font-semibold">{selectedCells.length}</span>
               </div>
             )}
@@ -185,86 +219,27 @@ export default function ExcelGridHandsontable() {
 
       {/* Handsontable Container */}
       <div className="flex-1 overflow-hidden relative">
-        <HotTable
-          ref={hotTableRef}
-          settings={settings}
-        />
-
-        {/* Modal contextual de comandos */}
-        {showCommandModal && (
-          <div
-            className="absolute z-50 bg-white rounded-xl shadow-2xl border-2 border-emerald-200 p-5 min-w-[420px] animate-in fade-in slide-in-from-top-2 duration-200"
-            style={{
-              left: Math.min(modalPosition.x, window.innerWidth - 450),
-              top: modalPosition.y,
-            }}
-          >
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-base font-bold text-gray-900">Comando de IA</h3>
-                </div>
-                <span className="text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full font-medium">
-                  {selectedCells.length} celda{selectedCells.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <p className="text-xs text-gray-600">
-                Describe qué quieres hacer con la selección
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <input
-                type="text"
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                placeholder='Ej: "Calcula el promedio"'
-                className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !isProcessing && command.trim()) {
-                    handleExecuteCommand()
-                  }
-                }}
-              />
-
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  onClick={() => {
-                    setShowCommandModal(false)
-                    setCommand("")
-                  }}
-                  className="px-4 py-2 text-sm text-gray-700 border-2 border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all font-medium"
-                  disabled={isProcessing}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleExecuteCommand}
-                  className="px-5 py-2 text-sm bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white rounded-lg hover:from-emerald-700 hover:via-teal-700 hover:to-green-700 disabled:from-gray-400 disabled:to-gray-400 transition-all shadow-md hover:shadow-lg font-medium"
-                  disabled={isProcessing || !command.trim()}
-                >
-                  {isProcessing ? (
-                    <span className="flex items-center gap-2">
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      Procesando...
-                    </span>
-                  ) : (
-                    "Ejecutar"
-                  )}
-                </button>
-              </div>
-            </div>
+        {isMounted ? (
+          <HotTable
+            ref={hotTableRef}
+            settings={settings}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-gray-400">Loading spreadsheet...</div>
           </div>
         )}
+
+        {/* Command Palette estilo Cursor */}
+        <CommandPalette
+          isOpen={showCommandModal}
+          onClose={handleCloseModal}
+          onExecute={handleExecuteCommand}
+          selectedRange={selectedRange}
+          cellCount={selectedCells.length}
+          position={modalPosition}
+          isProcessing={isProcessing}
+        />
       </div>
 
       {/* Estilos personalizados para Handsontable */}
@@ -274,7 +249,7 @@ export default function ExcelGridHandsontable() {
         }
         
         .excelia-table .htCore td.area {
-          background-color: #d1fae5 !important;
+          background-color: #f3f4f6 !important;
         }
         
         .excelia-table .htCore th {
@@ -285,15 +260,15 @@ export default function ExcelGridHandsontable() {
         }
         
         .excelia-table .htCore td.current {
-          background-color: #a7f3d0 !important;
+          background-color: #f3f4f6 !important;
         }
         
         .excelia-table .wtBorder.current {
-          border-color: #10b981 !important;
+          border-color: #6b7280 !important;
         }
         
         .excelia-table .wtBorder.area {
-          border-color: #10b981 !important;
+          border-color: #6b7280 !important;
         }
         
         .excelia-cell {
@@ -301,10 +276,9 @@ export default function ExcelGridHandsontable() {
         }
         
         .excelia-cell:hover {
-          background-color: #f0fdf4 !important;
+          background-color: #f9fafb !important;
         }
       `}</style>
     </div>
   )
 }
-
