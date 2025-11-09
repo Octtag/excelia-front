@@ -87,15 +87,12 @@ export default function ExcelGridHandsontable({
     setIsMounted(true)
   }, [])
 
-<<<<<<< HEAD
-=======
   // Notificar cambios en selectedCells al componente padre
   useEffect(() => {
     if (onSelectedCellsChange) {
       onSelectedCellsChange(selectedCells)
     }
   }, [selectedCells, onSelectedCellsChange])
->>>>>>> c328701 (Se puede subir un excel)
 
   // Detectar Ctrl+K para comando de IA
   useEffect(() => {
@@ -221,7 +218,6 @@ export default function ExcelGridHandsontable({
       cellProperties.className = 'excelia-cell'
       return cellProperties
     },
-<<<<<<< HEAD
     // Configurar el hook de selección después de la inicialización
     afterInit: function(this: any) {
       const hot = this as Handsontable.Core
@@ -233,7 +229,7 @@ export default function ExcelGridHandsontable({
       }
 
       hot.addHook('afterSelectionEnd', handleSelection)
-=======
+    },
     // Hooks para manejar selección durante edición de fórmulas
     afterBeginEditing: function(row: number, col: number) {
       const hot = hotTableRef.current?.hotInstance
@@ -355,7 +351,6 @@ export default function ExcelGridHandsontable({
           }
         })
       }
->>>>>>> c328701 (Se puede subir un excel)
     }
   }), [data, updateSelectedCellsFromHotInstance])
 

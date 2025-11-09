@@ -5,6 +5,7 @@ import ExcelGridHandsontable from "@/components/ExcelGridHandsontable"
 import ChatWindow from "@/components/ChatWindow"
 import { MessageCircle, Home } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useSelectedCells } from "@/contexts/SelectedCellsContext"
 
 const MIN_CHAT_WIDTH = 250
 const MAX_CHAT_WIDTH = 800
@@ -19,7 +20,7 @@ export default function EditorPage({ initialData }: EditorPageProps) {
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT_WIDTH)
   const [isResizing, setIsResizing] = useState(false)
-  const [selectedCells, setSelectedCells] = useState<Array<{row: number, col: number, value: string}>>([])
+  const { selectedCells } = useSelectedCells()
   const [headerHeight, setHeaderHeight] = useState(0)
   const [data, setData] = useState<string[][] | null>(initialData || null)
   const resizeRef = useRef<HTMLDivElement>(null)
@@ -137,7 +138,6 @@ export default function EditorPage({ initialData }: EditorPageProps) {
         <ExcelGridHandsontable
           isChatOpen={isChatOpen}
           onToggleChat={() => setIsChatOpen(!isChatOpen)}
-          onSelectedCellsChange={setSelectedCells}
           initialData={data}
         />
       </div>
